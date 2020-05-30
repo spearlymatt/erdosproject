@@ -5,3 +5,5 @@ The project.Rmd reads the data, cleans them, and preprocesses the documents to m
 The dfm_train.csv and dfm_test.csv are the training and test document-feature matrices (with targets) to be loaded into Python.
 
 The projectcode.ipynb builds, tunes, and tests all of the classifiers.
+
+The inequalty_slides.pdf is the slides for the presentation of the project and its results.
