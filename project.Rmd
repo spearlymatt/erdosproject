@@ -1,0 +1,183 @@
+---
+title: "Python Class Project"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+Load data:
+
+```{r}
+set.seed(43201)
+
+library(stm)
+library(tm)
+library(quanteda)
+library(caret)
+library(tidytext)
+library(dplyr)
+
+setwd("C:/Users/Matt/OneDrive - The Ohio State University/Summer 20/Python Class/Project")
+
+data <- read.csv("inequalitydocuments_handcode.csv")
+
+data$realid <- as.character(data$realid)
+
+data$lab <- as.factor(data$lab)
+
+data$treatment <- as.factor(data$treatment)
+
+data$response <- as.character(data$response)
+
+data$ideology_ra <- as.factor(data$ideology_ra)
+
+data$left <- as.factor(data$left)
+
+data$extreme <- as.factor(data$extreme)
+
+str(data)
+```
+
+Preprocess:
+
+```{r}
+dfm <- dfm(data$response, tolower=TRUE, stem=TRUE, remove=stopwords("english"),
+           remove_punct=TRUE)
+
+dfm <- convert(dfm, to="data.frame")
+
+dfm$numberid_meta <- data$numberid
+
+dfm$realid_meta <- data$realid
+
+dfm$treatment_meta <- data$treatment
+
+dfm$lab_meta <- data$lab
+
+dfm$ideology_ra_meta <- data$ideology_ra
+
+dfm$left_meta <- data$left
+
+dfm$extreme_meta <- data$extreme
+
+dfm <- dfm[,-1]
+
+dfm <- dfm[,c(1735:1741, 1:1734)]
+
+table(data$extreme)
+
+```
+
+Make test and training set:
+
+```{r}
+#subset out mturk data
+
+dfm_train_mturk <- subset(dfm, lab_meta==0)
+
+#subset out lab data
+
+lab_subset <- subset(dfm, lab_meta==1)
+
+#subset out treatment condition
+
+treatment_subset <- subset(lab_subset, treatment_meta==1)
+
+#subset out control condition
+
+control_subset <- subset(lab_subset, treatment_meta==0)
+
+#no need to keep lab subset or complete dfm
+
+rm(lab_subset, dfm)
+
+#select which observations to sample from treatment and control 
+#subsets so that there are equal numbers of each
+
+sampletreatment <- sample(1:117, size=71, replace=FALSE)
+
+samplecontrol <- sample(1:117, size=71, replace=FALSE)
+
+#make these into training sets
+
+treatment_train <- treatment_subset[sampletreatment,]
+
+control_train <- control_subset[samplecontrol,]
+
+#make the whole training set (mturk + treatment_train + control_train)
+
+dfm_train <- do.call("rbind", list(dfm_train_mturk, treatment_train, control_train))
+
+#remove unnecessary dataframes
+
+rm(control_train, dfm_train_mturk, treatment_train)
+
+#make test set out of remaining lab data
+
+treatment_test <- treatment_subset[-sampletreatment,]
+
+control_test <- control_subset[-samplecontrol,]
+
+dfm_test <- rbind(treatment_test, control_test)
+
+#remove unnecessary objects
+
+rm(control_subset, control_test, treatment_subset, treatment_test, samplecontrol,
+   sampletreatment)
+
+```
+
+Prep data for Python:
+
+```{r}
+#get rid of everything but the target--left_meta--and predictors
+
+dfm_train <- dfm_train[,-c(1:5,7)]
+
+dfm_test <- dfm_test[,-c(1:5,7)]
+
+#keep only complete cases
+
+dfm_train <- dfm_train[complete.cases(dfm_train)==TRUE,]
+
+dfm_test <- dfm_test[complete.cases(dfm_test)==TRUE,]
+
+#write.csv(dfm_train, "dfm_train.csv", row.names=FALSE)
+
+#write.csv(dfm_test, "dfm_test.csv", row.names=FALSE)
+
+```
+
+Make descriptive plots:
+
+```{r}
+tidy_data <- data %>%
+  unnest_tokens(word, response) %>%
+  anti_join(stop_words) %>%
+  na.omit() %>%
+  count(left, word, sort = TRUE)
+total_words <- tidy_data %>%
+  group_by(left) %>%
+  summarize(total = sum(n))
+data_words <- left_join(tidy_data, total_words)
+tfidf_words <- data_words %>%
+  bind_tf_idf(word, left, n)
+levels(tfidf_words$left)
+levels(tfidf_words$left) <- c("Right", "Left")
+tfidf_words %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>%
+  group_by(left) %>%
+  top_n(20) %>%
+  ungroup() %>%
+  ggplot(aes(word, tf_idf, fill = left, alpha = 2)) +
+  scale_fill_brewer(palette = "Set1") +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  theme_minimal() +
+  facet_wrap(~left, ncol = 2, scales = "free") +
+  coord_flip() +
+  ggsave("tfidf.png", path = "C:/Users/Matt/OneDrive - The Ohio State University/Summer 20/Python Class/Project",
+         width = 5, height = 5, dpi = 800)
+```
+
